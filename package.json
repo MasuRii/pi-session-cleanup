@@ -1,0 +1,66 @@
+{
+  "name": "pi-session-cleanup",
+  "version": "1.0.0",
+  "description": "Pi extension for interactive batch session cleanup and safe deletion.",
+  "type": "module",
+  "main": "./index.ts",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "files": [
+    "index.ts",
+    "src",
+    "config/config.example.json",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "npx --yes -p typescript@5.7.3 tsc -p tsconfig.json --noCheck",
+    "lint": "npm run build",
+    "test:clean": "node -e \"require('node:fs').rmSync('.test-dist', { recursive: true, force: true })\"",
+    "pretest": "npm run test:clean",
+    "test": "npx --yes -p typescript@5.7.3 tsc -p tsconfig.test.json && node --test .test-dist/test/*.test.js",
+    "posttest": "npm run test:clean",
+    "check": "npm run lint && npm run test",
+    "package:dry-run": "npm pack --dry-run"
+  },
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-extension",
+    "session",
+    "cleanup",
+    "delete",
+    "pi-coding-agent",
+    "pi-tui",
+    "session-management",
+    "tui",
+    "safe-delete"
+  ],
+  "author": "MasuRii",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": "^0.70.5",
+    "@mariozechner/pi-tui": "^0.70.5"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MasuRii/pi-session-cleanup.git"
+  },
+  "bugs": {
+    "url": "https://github.com/MasuRii/pi-session-cleanup/issues"
+  },
+  "homepage": "https://github.com/MasuRii/pi-session-cleanup#readme"
+}

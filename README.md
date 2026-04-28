@@ -4,6 +4,8 @@
 
 Interactive session cleanup extension for the [Pi coding agent](https://github.com/mariozechner/pi).
 
+<img width="1389" height="768" alt="image" src="https://github.com/user-attachments/assets/42464ca1-4a6c-4496-b13f-5bcc2093bf59" />
+
 **pi-session-cleanup** provides a focused TUI command for batch-selecting historical sessions and deleting them safely with trash-first fallback and active session protection.
 
 ## Features

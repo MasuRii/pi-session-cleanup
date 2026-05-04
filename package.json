@@ -1,6 +1,6 @@
 {
   "name": "pi-session-cleanup",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Pi extension for interactive batch session cleanup and safe deletion.",
   "type": "module",
   "main": "./index.ts",

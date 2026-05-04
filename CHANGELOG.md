@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.0 - 2026-05-04
+
+- Added `/nix quit` for confirmed current-session deletion during graceful Pi shutdown
+- Added `/nix agent [name]` for starting fresh sessions with persisted target-agent metadata
+- Added `/nix` argument completions, explicit help output, and safer compatibility warnings for unsupported Pi builds
+- Documented destructive `/nix` safeguards and added targeted release-readiness coverage for the new session flows
+
 ## 1.0.0 - 2026-03-05
 
 - Renamed extension from its previous package name to `pi-session-cleanup`

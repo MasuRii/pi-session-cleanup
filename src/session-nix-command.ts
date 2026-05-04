@@ -3,10 +3,52 @@ import { basename } from "node:path";
 import type { ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 
 import { SESSION_NIX_COMMAND } from "./constants.js";
+import {
+  resolveTargetAgentForSessionNix,
+  type SelectableAgent,
+} from "./agent-target.js";
+import { extractPersistedActiveAgentNameFromEntries } from "./session-agent.js";
 import { deleteSessionFile } from "./session-delete.js";
+import { appendActiveAgentSessionEntry } from "./session-entry.js";
+import {
+  clearScheduledSessionDeletionForQuit,
+  scheduleSessionDeletionForQuit,
+} from "./session-quit-shutdown.js";
+
+const ARG_COMPLETIONS = [
+  {
+    value: "quit",
+    label: "quit",
+    description: "Delete the current session and quit Pi immediately",
+  },
+  {
+    value: "agent",
+    label: "agent",
+    description: "Start a fresh session with a selected target agent",
+  },
+  {
+    value: "help",
+    label: "help",
+    description: "Show usage",
+  },
+] as const;
+
+type NixMode = "fresh" | "quit" | "agent";
+
+interface ParsedArgs {
+  help: boolean;
+  mode: NixMode;
+  targetAgentName?: string;
+  error?: string;
+}
 
 function usage(): string {
-  return `Usage: /${SESSION_NIX_COMMAND}`;
+  return [
+    `Usage: /${SESSION_NIX_COMMAND}`,
+    `       /${SESSION_NIX_COMMAND} quit`,
+    `       /${SESSION_NIX_COMMAND} agent [name]`,
+    `       /${SESSION_NIX_COMMAND} help`,
+  ].join("\n");
 }
 
 function getSessionLabel(sessionPath: string): string {
@@ -14,7 +56,48 @@ function getSessionLabel(sessionPath: string): string {
   return fileName.length > 0 ? fileName : sessionPath;
 }
 
-function buildConfirmationMessage(previousSessionFile: string | undefined): string {
+function parseArgs(args: string): ParsedArgs {
+  const trimmed = args.trim();
+  if (!trimmed) {
+    return { help: false, mode: "fresh" };
+  }
+
+  const parts = trimmed.split(/\s+/);
+  const command = parts[0]?.toLowerCase();
+  if (!command) {
+    return { help: false, mode: "fresh" };
+  }
+
+  if (command === "help") {
+    return { help: true, mode: "fresh" };
+  }
+
+  if (command === "quit" || command === "exit") {
+    return parts.length === 1
+      ? { help: false, mode: "quit" }
+      : {
+          help: false,
+          mode: "quit",
+          error: `/${SESSION_NIX_COMMAND} quit does not accept additional arguments.`,
+        };
+  }
+
+  if (command === "agent") {
+    return {
+      help: false,
+      mode: "agent",
+      targetAgentName: parts.length > 1 ? parts.slice(1).join(" ") : undefined,
+    };
+  }
+
+  return {
+    help: false,
+    mode: "fresh",
+    error: `Unknown argument: ${trimmed}`,
+  };
+}
+
+function buildFreshConfirmationMessage(previousSessionFile: string | undefined): string {
   if (!previousSessionFile) {
     return "This will start a new session. The current session is not persisted yet, so there is no session file to delete.";
   }
@@ -28,37 +111,74 @@ function buildConfirmationMessage(previousSessionFile: string | undefined): stri
   ].join("\n");
 }
 
-export async function handleSessionNixCommand(
-  args: string,
+function buildQuitConfirmationMessage(previousSessionFile: string | undefined): string {
+  if (!previousSessionFile) {
+    return "This will quit Pi immediately. The current session is not persisted yet, so there is no session file to delete first.";
+  }
+
+  return [
+    "This will permanently remove the current session and then quit Pi immediately.",
+    "",
+    `Current session: ${getSessionLabel(previousSessionFile)}`,
+    "",
+    "Pi will try moving it to trash first, then permanently delete it if trash is unavailable.",
+  ].join("\n");
+}
+
+function buildAgentConfirmationMessage(
+  previousSessionFile: string | undefined,
+  targetAgent: SelectableAgent,
+): string {
+  if (!previousSessionFile) {
+    return [
+      `This will start a new session with agent '${targetAgent.name}'.`,
+      "",
+      "The current session is not persisted yet, so there is no session file to delete.",
+    ].join("\n");
+  }
+
+  return [
+    `This will start a new session with agent '${targetAgent.name}' and remove the current session from history.`,
+    "",
+    `Current session: ${getSessionLabel(previousSessionFile)}`,
+    `Target agent: ${targetAgent.name}`,
+    "",
+    "Pi will try moving the old session to trash first, then permanently delete it if trash is unavailable.",
+  ].join("\n");
+}
+
+export function getSessionNixArgumentCompletions(
+  argumentPrefix: string,
+): Array<{ value: string; label: string; description?: string }> | null {
+  const normalizedPrefix = argumentPrefix.trim().toLowerCase();
+  if (!normalizedPrefix) {
+    return [...ARG_COMPLETIONS];
+  }
+
+  const matched = ARG_COMPLETIONS.filter((item) => item.value.startsWith(normalizedPrefix));
+  if (matched.length === 0) {
+    return null;
+  }
+
+  return matched.map((item) => ({ ...item }));
+}
+
+async function deletePreviousSessionAfterSwitch(previousSessionFile: string | undefined): Promise<void> {
+  if (!previousSessionFile) {
+    return;
+  }
+
+  try {
+    await deleteSessionFile(previousSessionFile);
+  } catch {
+    // The new session is already active. Avoid surfacing stale-context errors.
+  }
+}
+
+async function startFreshSession(
   ctx: ExtensionCommandContext,
+  previousSessionFile: string | undefined,
 ): Promise<void> {
-  const normalizedArgs = args.trim();
-  if (normalizedArgs.toLowerCase() === "help") {
-    ctx.ui.notify(usage(), "info");
-    return;
-  }
-
-  if (normalizedArgs.length > 0) {
-    ctx.ui.notify(`/${SESSION_NIX_COMMAND} does not accept arguments.\n${usage()}`, "warning");
-    return;
-  }
-
-  if (!ctx.hasUI) {
-    ctx.ui.notify(`/${SESSION_NIX_COMMAND} requires interactive TUI mode.`, "warning");
-    return;
-  }
-
-  const previousSessionFile = ctx.sessionManager.getSessionFile();
-  const confirmed = await ctx.ui.confirm(
-    "Start fresh and delete current session",
-    buildConfirmationMessage(previousSessionFile),
-  );
-
-  if (!confirmed) {
-    ctx.ui.notify(`/${SESSION_NIX_COMMAND} cancelled.`, "info");
-    return;
-  }
-
   try {
     const newSessionResult = await ctx.newSession();
     if (newSessionResult.cancelled) {
@@ -71,14 +191,139 @@ export async function handleSessionNixCommand(
     return;
   }
 
-  // After successful ctx.newSession(), ctx is stale. Do NOT call ctx.ui.notify() below.
-  if (!previousSessionFile) {
+  await deletePreviousSessionAfterSwitch(previousSessionFile);
+}
+
+async function startAgentTargetSession(
+  ctx: ExtensionCommandContext,
+  previousSessionFile: string | undefined,
+  targetAgent: SelectableAgent,
+): Promise<void> {
+  try {
+    const newSessionResult = await ctx.newSession({
+      setup: async (sessionManager) => {
+        appendActiveAgentSessionEntry(sessionManager, targetAgent.name);
+      },
+    });
+
+    if (newSessionResult.cancelled) {
+      ctx.ui.notify("New session cancelled.", "info");
+      return;
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    ctx.ui.notify(`Failed to start a new session for agent '${targetAgent.name}': ${message}`, "error");
     return;
   }
 
-  try {
-    await deleteSessionFile(previousSessionFile);
-  } catch {
-    // Deletion failure is non-critical; the session was already replaced.
+  await deletePreviousSessionAfterSwitch(previousSessionFile);
+}
+
+async function requestGracefulQuit(
+  ctx: ExtensionCommandContext,
+  previousSessionFile: string | undefined,
+): Promise<void> {
+  const shutdown = (ctx as ExtensionCommandContext & {
+    shutdown?: () => Promise<void> | void;
+  }).shutdown;
+
+  if (typeof shutdown !== "function") {
+    ctx.ui.notify(
+      "Graceful shutdown is unavailable in this Pi build. Update Pi to use /nix quit safely.",
+      "warning",
+    );
+    return;
   }
+
+  scheduleSessionDeletionForQuit(previousSessionFile);
+
+  try {
+    await Promise.resolve(shutdown.call(ctx));
+  } catch (error) {
+    clearScheduledSessionDeletionForQuit();
+    const message = error instanceof Error ? error.message : String(error);
+    ctx.ui.notify(`Failed to quit Pi gracefully: ${message}`, "error");
+  }
+}
+
+export async function handleSessionNixCommand(
+  args: string,
+  ctx: ExtensionCommandContext,
+): Promise<void> {
+  const parsed = parseArgs(args);
+  if (parsed.help) {
+    ctx.ui.notify(usage(), "info");
+    return;
+  }
+
+  if (parsed.error) {
+    ctx.ui.notify(`${parsed.error}\n${usage()}`, "warning");
+    return;
+  }
+
+  if (!ctx.hasUI) {
+    ctx.ui.notify(`/${SESSION_NIX_COMMAND} requires interactive TUI mode.`, "warning");
+    return;
+  }
+
+  const previousSessionFile = ctx.sessionManager.getSessionFile();
+
+  if (parsed.mode === "fresh") {
+    const confirmed = await ctx.ui.confirm(
+      "Start fresh and delete current session",
+      buildFreshConfirmationMessage(previousSessionFile),
+    );
+
+    if (!confirmed) {
+      ctx.ui.notify(`/${SESSION_NIX_COMMAND} cancelled.`, "info");
+      return;
+    }
+
+    await startFreshSession(ctx, previousSessionFile);
+    return;
+  }
+
+  if (parsed.mode === "quit") {
+    const confirmed = await ctx.ui.confirm(
+      "Delete current session and quit Pi",
+      buildQuitConfirmationMessage(previousSessionFile),
+    );
+
+    if (!confirmed) {
+      ctx.ui.notify(`/${SESSION_NIX_COMMAND} quit cancelled.`, "info");
+      return;
+    }
+
+    await requestGracefulQuit(ctx, previousSessionFile);
+    return;
+  }
+
+  const currentAgentName =
+    extractPersistedActiveAgentNameFromEntries(ctx.sessionManager.getEntries()) ?? null;
+  const targetAgent = await resolveTargetAgentForSessionNix(
+    ctx,
+    parsed.targetAgentName,
+    currentAgentName,
+  );
+
+  if (targetAgent === null) {
+    ctx.ui.notify(`/${SESSION_NIX_COMMAND} agent cancelled.`, "info");
+    return;
+  }
+
+  if (!targetAgent) {
+    return;
+  }
+
+  const confirmed = await ctx.ui.confirm(
+    `Start a new '${targetAgent.name}' session`,
+    buildAgentConfirmationMessage(previousSessionFile, targetAgent),
+  );
+
+  if (!confirmed) {
+    ctx.ui.notify(`/${SESSION_NIX_COMMAND} agent cancelled.`, "info");
+    return;
+  }
+
+  await startAgentTargetSession(ctx, previousSessionFile, targetAgent);
 }

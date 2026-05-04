@@ -2,6 +2,7 @@ declare namespace NodeJS {
   interface Process {
     env: Record<string, string | undefined>;
     platform: string;
+    exit(code?: number): never;
     stdout: {
       columns?: number;
       rows?: number;
@@ -34,10 +35,12 @@ declare module "node:child_process" {
 }
 
 declare module "node:fs" {
+  export function appendFileSync(path: string, data: string, encoding: string): void;
   export function existsSync(path: string): boolean;
   export function mkdirSync(path: string, options?: { recursive?: boolean }): void;
   export function mkdtempSync(prefix: string): string;
   export function readFileSync(path: string, encoding: string): string;
+  export function readdirSync(path: string): string[];
   export function rmSync(path: string, options?: { recursive?: boolean; force?: boolean }): void;
   export function writeFileSync(path: string, data: string, encoding: string): void;
 }
@@ -56,6 +59,7 @@ declare module "node:path" {
   export function basename(path: string): string;
   export function dirname(path: string): string;
   export function join(...parts: string[]): string;
+  export function resolve(...parts: string[]): string;
 }
 
 declare module "node:test" {
@@ -91,6 +95,8 @@ declare module "@mariozechner/pi-tui" {
 declare module "@mariozechner/pi-coding-agent" {
   import type { Component } from "@mariozechner/pi-tui";
 
+  export function getAgentDir(): string;
+
   export interface SessionInfo {
     path: string;
     id: string;
@@ -107,6 +113,7 @@ declare module "@mariozechner/pi-coding-agent" {
   export class SessionManager {
     static list(cwd: string, sessionDir: string): Promise<SessionInfo[]>;
     static listAll(): Promise<SessionInfo[]>;
+    appendCustomEntry(customType: string, data?: unknown): string;
     getSessionId(): string;
     getSessionFile(): string | undefined;
     getCwd(): string;
@@ -141,6 +148,7 @@ declare module "@mariozechner/pi-coding-agent" {
     sessionManager: SessionManager;
     ui: ExtensionUIContext;
     getSystemPrompt(): string;
+    shutdown?(): Promise<void> | void;
   }
 
   export interface ExtensionCommandContext extends ExtensionContext {
@@ -163,6 +171,12 @@ declare module "@mariozechner/pi-coding-agent" {
     reason: "new" | "resume" | "fork" | "reload";
   }
 
+  export interface SessionShutdownEvent {
+    type: "session_shutdown";
+    reason?: "quit" | "reload" | "new" | "resume" | "fork";
+    targetSessionFile?: string;
+  }
+
   export interface ExtensionAPI {
     on(
       event: "resources_discover",
@@ -171,6 +185,10 @@ declare module "@mariozechner/pi-coding-agent" {
     on(
       event: "session_start",
       handler: (event: SessionStartEvent, ctx: ExtensionContext) => void | Promise<void>,
+    ): void;
+    on(
+      event: "session_shutdown",
+      handler: (event: SessionShutdownEvent, ctx: ExtensionContext) => void | Promise<void>,
     ): void;
 
     registerCommand(

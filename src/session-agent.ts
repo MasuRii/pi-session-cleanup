@@ -66,6 +66,31 @@ export async function resolveResponsibleAgentName(sessionPath: string): Promise<
   }
 }
 
+export function extractPersistedActiveAgentNameFromEntries(
+  entries: readonly unknown[],
+): string | null | undefined {
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = toRecord(entries[index]);
+    if (!entry || entry.type !== "custom" || entry.customType !== "active_agent") {
+      continue;
+    }
+
+    const data = toRecord(entry.data);
+    const normalizedAgentName = normalizeAgentName(data?.name);
+    if (normalizedAgentName) {
+      return normalizedAgentName;
+    }
+
+    if (data?.name === null) {
+      return null;
+    }
+
+    return null;
+  }
+
+  return undefined;
+}
+
 export async function enrichSessionWithResponsibleAgent(
   session: SessionInfo,
 ): Promise<SessionCleanupSession> {

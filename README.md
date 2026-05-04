@@ -14,6 +14,9 @@ Interactive session cleanup extension for the [Pi coding agent](https://github.c
 - **Scope Filtering** — View only orphaned sessions or all historical sessions
 - **Batch Selection Controls** — Multi-select with Space, select all with `a`, keyboard navigation
 - **Safe Delete Flow** — Excludes the currently active session and uses trash-first deletion with unlink fallback
+- **Fresh Session Shortcut** — `/nix` starts a fresh session and removes the previous session after confirmation
+- **Target Agent Handoff** — `/nix agent [name]` starts a fresh session with persisted active-agent metadata
+- **Quit Cleanup Flow** — `/nix quit` schedules current-session deletion during Pi's graceful shutdown event
 - **Improved Modal UX** — Centered overlay with bordered layout, concise single-line legend, status summary, and automatic icon fallback
 
 ## Installation
@@ -51,12 +54,26 @@ pi install git:github.com/MasuRii/pi-session-cleanup
 | `/session-cleanup current` | — | Opens modal with sessions from the current directory |
 | `/session-cleanup all` | — | Opens modal showing all sessions |
 | `/session-cleanup help` | — | Displays usage help |
+| `/nix` | — | Starts a fresh session after confirmation and deletes the previous session |
+| `/nix quit` | — | Deletes the current session during graceful shutdown and quits Pi |
+| `/nix agent` | `[name]` | Starts a fresh session with a selected or explicitly named target agent |
+| `/nix help` | — | Displays `/nix` usage help |
 
 **Scopes:**
 
 - **Default (no args)** — Shows orphaned sessions (sessions without a matching directory)
 - **`current`** — Shows sessions from the current working directory
 - **`all`** — Shows all historical sessions across all directories
+
+### `/nix` Fresh Session Workflow
+
+`/nix` is destructive by design and always asks for confirmation before deleting any session file.
+
+- **`/nix`** starts a new session with the current agent and deletes the previous session only after `ctx.newSession()` succeeds.
+- **`/nix agent [name]`** starts a new session with the selected target agent and writes an `active_agent` session entry so Pi can resume that agent context. Without `[name]`, the command opens an interactive agent picker; with `[name]`, it validates the name before continuing.
+- **`/nix quit`** requires Pi builds that expose `ctx.shutdown()`. It schedules deletion of the current session and performs the delete from the `session_shutdown` event, so the session file is not removed until Pi has begun graceful shutdown.
+
+Target agents are discovered from the nearest project agent folders (`.omp/agents`, `.pi/agents`, `.claude/agents`) plus user agent folders (`~/.omp/agents`, `$PI_CODING_AGENT_DIR/agents`, `~/.claude/agents`). If `pi-agent-router` is installed with custom `agentDiscovery` paths, those paths are reused.
 
 ### Modal Controls
 
@@ -79,8 +96,9 @@ The extension includes multiple safety mechanisms:
 
 1. **Active Session Protection** — The currently active session is never shown in the list and cannot be deleted
 2. **Trash-First Deletion** — Sessions are moved to trash first; only falls back to permanent deletion if trash is unavailable
-3. **Confirmation Required** — The modal requires explicit `Enter` keypress to proceed with deletion
-4. **Escapable** — `Esc` or `q` immediately cancels without any changes
+3. **Confirmation Required** — The modal requires explicit `Enter` keypress to proceed with deletion, and `/nix` commands require `ctx.ui.confirm()` approval
+4. **Graceful Quit Guard** — `/nix quit` refuses to delete anything when the active Pi build does not expose `ctx.shutdown()`
+5. **Escapable** — `Esc` or `q` immediately cancels without any changes
 
 ## Configuration
 

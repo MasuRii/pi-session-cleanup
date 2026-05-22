@@ -1,4 +1,4 @@
-import type { SessionInfo } from "@mariozechner/pi-coding-agent";
+import type { SessionInfo } from "@earendil-works/pi-coding-agent";
 
 export type SessionScope = "current" | "all";
 

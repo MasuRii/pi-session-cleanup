@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import type { ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 
 const DEFAULT_PROJECT_SOURCE_DIRS = [".omp/agents", ".pi/agents", ".claude/agents"];
 const DEFAULT_USER_SOURCE_DIRS = ["{home}/.omp/agents", "{agentDir}/agents", "{home}/.claude/agents"];

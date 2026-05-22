@@ -1,7 +1,7 @@
 import {
   SessionManager,
   type ExtensionCommandContext,
-} from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-coding-agent";
 
 import { enrichSessionWithResponsibleAgent } from "./session-agent.js";
 import { sortSessionsNewestFirst } from "./session-sort.js";

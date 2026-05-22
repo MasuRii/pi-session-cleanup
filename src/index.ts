@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 import { SESSION_CLEANUP_COMMAND, SESSION_NIX_COMMAND } from "./constants.js";
 import {

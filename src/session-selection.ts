@@ -1,4 +1,4 @@
-import type { ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 
 import { buildSessionSelectionLabel } from "./session-format.js";
 import { showSessionCleanupPicker } from "./tui/session-cleanup-picker.js";

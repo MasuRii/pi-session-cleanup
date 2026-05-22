@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 
-import type { SessionInfo } from "@mariozechner/pi-coding-agent";
+import type { SessionInfo } from "@earendil-works/pi-coding-agent";
 
 import type { SessionCleanupSession } from "./types.js";
 

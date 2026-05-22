@@ -1,7 +1,7 @@
 import type {
   ExtensionCommandContext,
   SessionInfo,
-} from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-coding-agent";
 
 import {
   SESSION_CLEANUP_COMMAND,

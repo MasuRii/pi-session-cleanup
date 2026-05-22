@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 
-import type { SessionInfo } from "@mariozechner/pi-coding-agent";
+import type { SessionInfo } from "@earendil-works/pi-coding-agent";
 
 const LABEL_MAX_TEXT = 56;
 

@@ -1,6 +1,6 @@
 import { basename } from "node:path";
 
-import type { SessionInfo } from "@mariozechner/pi-coding-agent";
+import type { SessionInfo } from "@earendil-works/pi-coding-agent";
 
 function toTimestamp(value: unknown): number | null {
   if (value instanceof Date) {

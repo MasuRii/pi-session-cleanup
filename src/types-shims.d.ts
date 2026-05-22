@@ -11,6 +11,15 @@ declare namespace NodeJS {
 }
 
 declare const process: NodeJS.Process;
+declare function setTimeout(handler: () => void, timeout?: number): { unref?(): void };
+declare function clearTimeout(timeout: { unref?(): void }): void;
+type Buffer = { length: number; toString(encoding?: string): string };
+declare const Buffer: {
+  alloc(size: number): Buffer;
+  concat(chunks: Buffer[]): Buffer;
+  from(value: string): Buffer;
+  isBuffer(value: unknown): value is Buffer;
+};
 
 declare module "node:assert/strict" {
   const assert: {
@@ -23,15 +32,20 @@ declare module "node:assert/strict" {
 }
 
 declare module "node:child_process" {
-  export function spawnSync(
+  interface ChildProcessLike {
+    stderr?: {
+      on(event: "data", handler: (chunk: unknown) => void): void;
+    };
+    kill(): void;
+    on(event: "error", handler: (error: Error) => void): void;
+    on(event: "close", handler: (status: number | null) => void): void;
+  }
+
+  export function spawn(
     command: string,
     args?: readonly string[],
     options?: Record<string, unknown>,
-  ): {
-    status: number | null;
-    stderr?: unknown;
-    error?: Error;
-  };
+  ): ChildProcessLike;
 }
 
 declare module "node:fs" {
@@ -75,7 +89,7 @@ declare module "node:url" {
   export function fileURLToPath(url: unknown): string;
 }
 
-declare module "@mariozechner/pi-tui" {
+declare module "@earendil-works/pi-tui" {
   export interface Component {
     render(width: number): string[];
     handleInput(data: string): void;
@@ -92,8 +106,8 @@ declare module "@mariozechner/pi-tui" {
   export function visibleWidth(text: string): number;
 }
 
-declare module "@mariozechner/pi-coding-agent" {
-  import type { Component } from "@mariozechner/pi-tui";
+declare module "@earendil-works/pi-coding-agent" {
+  import type { Component } from "@earendil-works/pi-tui";
 
   export function getAgentDir(): string;
 

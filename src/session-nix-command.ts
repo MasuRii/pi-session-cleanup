@@ -1,6 +1,6 @@
 import { basename } from "node:path";
 
-import type { ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 
 import { SESSION_NIX_COMMAND } from "./constants.js";
 import {
@@ -40,6 +40,12 @@ interface ParsedArgs {
   mode: NixMode;
   targetAgentName?: string;
   error?: string;
+}
+
+type DeleteSessionFileFn = typeof deleteSessionFile;
+
+interface SessionNixCommandOptions {
+  deleteSessionFile?: DeleteSessionFileFn;
 }
 
 function usage(): string {
@@ -163,21 +169,36 @@ export function getSessionNixArgumentCompletions(
   return matched.map((item) => ({ ...item }));
 }
 
-async function deletePreviousSessionAfterSwitch(previousSessionFile: string | undefined): Promise<void> {
+async function deletePreviousSessionAfterSwitch(
+  ctx: ExtensionCommandContext,
+  previousSessionFile: string | undefined,
+  deleteSessionFileFn: DeleteSessionFileFn,
+): Promise<void> {
   if (!previousSessionFile) {
     return;
   }
 
   try {
-    await deleteSessionFile(previousSessionFile);
-  } catch {
-    // The new session is already active. Avoid surfacing stale-context errors.
+    const deleteResult = await deleteSessionFileFn(previousSessionFile);
+    if (!deleteResult.ok) {
+      ctx.ui.notify(
+        `Failed to delete the previous session after starting the new session: ${deleteResult.error}`,
+        "warning",
+      );
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    ctx.ui.notify(
+      `Failed to delete the previous session after starting the new session: ${message}`,
+      "warning",
+    );
   }
 }
 
 async function startFreshSession(
   ctx: ExtensionCommandContext,
   previousSessionFile: string | undefined,
+  deleteSessionFileFn: DeleteSessionFileFn,
 ): Promise<void> {
   try {
     const newSessionResult = await ctx.newSession();
@@ -191,13 +212,14 @@ async function startFreshSession(
     return;
   }
 
-  await deletePreviousSessionAfterSwitch(previousSessionFile);
+  await deletePreviousSessionAfterSwitch(ctx, previousSessionFile, deleteSessionFileFn);
 }
 
 async function startAgentTargetSession(
   ctx: ExtensionCommandContext,
   previousSessionFile: string | undefined,
   targetAgent: SelectableAgent,
+  deleteSessionFileFn: DeleteSessionFileFn,
 ): Promise<void> {
   try {
     const newSessionResult = await ctx.newSession({
@@ -216,7 +238,7 @@ async function startAgentTargetSession(
     return;
   }
 
-  await deletePreviousSessionAfterSwitch(previousSessionFile);
+  await deletePreviousSessionAfterSwitch(ctx, previousSessionFile, deleteSessionFileFn);
 }
 
 async function requestGracefulQuit(
@@ -249,6 +271,7 @@ async function requestGracefulQuit(
 export async function handleSessionNixCommand(
   args: string,
   ctx: ExtensionCommandContext,
+  options: SessionNixCommandOptions = {},
 ): Promise<void> {
   const parsed = parseArgs(args);
   if (parsed.help) {
@@ -267,6 +290,7 @@ export async function handleSessionNixCommand(
   }
 
   const previousSessionFile = ctx.sessionManager.getSessionFile();
+  const deleteSessionFileFn = options.deleteSessionFile ?? deleteSessionFile;
 
   if (parsed.mode === "fresh") {
     const confirmed = await ctx.ui.confirm(
@@ -279,7 +303,7 @@ export async function handleSessionNixCommand(
       return;
     }
 
-    await startFreshSession(ctx, previousSessionFile);
+    await startFreshSession(ctx, previousSessionFile, deleteSessionFileFn);
     return;
   }
 
@@ -325,5 +349,5 @@ export async function handleSessionNixCommand(
     return;
   }
 
-  await startAgentTargetSession(ctx, previousSessionFile, targetAgent);
+  await startAgentTargetSession(ctx, previousSessionFile, targetAgent, deleteSessionFileFn);
 }

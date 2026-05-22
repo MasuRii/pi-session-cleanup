@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.1 - 2026-05-22
+
+- Sends session files to available desktop trash providers (`trash`, `trash-put`, `gio trash`, or `kioclient move`) before permanent deletion.
+- Warns `/nix quit` users when trash providers are unavailable and requires confirmation before permanent current-session deletion fallback.
+- Added coverage for trash-provider selection and `/nix` deletion warning behavior.
+
 ## 1.1.0 - 2026-05-04
 
 - Added `/nix quit` for confirmed current-session deletion during graceful Pi shutdown

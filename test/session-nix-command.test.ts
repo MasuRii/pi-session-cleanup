@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import type { ExtensionCommandContext, SessionManager } from "@mariozechner/pi-coding-agent";
+import type { ExtensionCommandContext, SessionManager } from "@earendil-works/pi-coding-agent";
 
 import {
   getSessionNixArgumentCompletions,
@@ -152,6 +152,29 @@ test("handleSessionNixCommand starts fresh sessions only after confirmation and 
   }
 });
 
+test("handleSessionNixCommand warns when fresh-session deletion fails after switching", async () => {
+  const sessionPath = "session.jsonl";
+  const mock = createCommandContext({ sessionFile: sessionPath });
+  let deleteCalls = 0;
+
+  await handleSessionNixCommand("", mock.ctx, {
+    deleteSessionFile: async (path: string) => {
+      deleteCalls += 1;
+      assert.equal(path, sessionPath);
+      return { ok: false, method: "unlink", error: "permission denied" };
+    },
+  });
+
+  assert.equal(mock.newSessionCalls, 1);
+  assert.equal(deleteCalls, 1);
+  assert.deepEqual(mock.notifications, [
+    {
+      message: "Failed to delete the previous session after starting the new session: permission denied",
+      type: "warning",
+    },
+  ]);
+});
+
 test("handleSessionNixCommand refuses /nix quit when graceful shutdown is unavailable", async () => {
   const mock = createCommandContext({ sessionFile: "session.jsonl" });
 
@@ -164,6 +187,48 @@ test("handleSessionNixCommand refuses /nix quit when graceful shutdown is unavai
     mock.notifications[0]?.message.includes("Graceful shutdown is unavailable"),
     "expected shutdown compatibility warning",
   );
+});
+
+test("handleSessionNixCommand warns when target-agent session deletion fails after switching", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "pi-session-cleanup-nix-agent-delete-fail-"));
+
+  try {
+    const runtimeDir = join(tempDir, "runtime");
+    const cwd = join(tempDir, "workspace");
+    const agentsDir = join(cwd, ".pi", "agents");
+    const sessionPath = join(tempDir, "session.jsonl");
+    mkdirSync(agentsDir, { recursive: true });
+    mkdirSync(runtimeDir, { recursive: true });
+    writeFileSync(
+      join(agentsDir, "release-agent.md"),
+      "---\nname: release-agent\ndescription: Release readiness agent\nmode: subagent\n---\n",
+      "utf8",
+    );
+
+    const mock = createCommandContext({ cwd, sessionFile: sessionPath });
+    let deleteCalls = 0;
+
+    await withEnv({ PI_CODING_AGENT_DIR: runtimeDir }, async () => {
+      await handleSessionNixCommand("agent release-agent", mock.ctx, {
+        deleteSessionFile: async (path: string) => {
+          deleteCalls += 1;
+          assert.equal(path, sessionPath);
+          return { ok: false, method: "unlink", error: "trash and unlink failed" };
+        },
+      });
+    });
+
+    assert.equal(mock.newSessionCalls, 1);
+    assert.equal(deleteCalls, 1);
+    assert.deepEqual(mock.notifications, [
+      {
+        message: "Failed to delete the previous session after starting the new session: trash and unlink failed",
+        type: "warning",
+      },
+    ]);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
 });
 
 test("handleSessionNixCommand starts an explicit target-agent session with active-agent metadata", async () => {

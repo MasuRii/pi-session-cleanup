@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.2 - 2026-05-26
+
+- Widened peer dependency ranges to `^0.74.0 || ^0.75.0`.
+
 ## 1.1.1 - 2026-05-22
 
 - Sends session files to available desktop trash providers (`trash`, `trash-put`, `gio trash`, or `kioclient move`) before permanent deletion.

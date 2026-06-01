@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.3 - 2026-06-01
+
+- Deferred command module loading for `/session-cleanup` and `/nix` handlers while preserving inline completions.
+- Widened Pi coding-agent and Pi TUI peer dependency ranges to include `^0.77.0 || ^0.78.0`.
+
 ## 1.1.2 - 2026-05-26
 
 - Widened peer dependency ranges to `^0.74.0 || ^0.75.0`.

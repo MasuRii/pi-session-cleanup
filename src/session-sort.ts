@@ -69,7 +69,23 @@ function parseCalendarCandidate(path: string): number | null {
   }
 
   const utcTimestamp = Date.UTC(year, month - 1, day, hour, minute, second);
-  return Number.isFinite(utcTimestamp) ? utcTimestamp : null;
+  if (!Number.isFinite(utcTimestamp)) {
+    return null;
+  }
+
+  const parsed = new Date(utcTimestamp);
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day ||
+    parsed.getUTCHours() !== hour ||
+    parsed.getUTCMinutes() !== minute ||
+    parsed.getUTCSeconds() !== second
+  ) {
+    return null;
+  }
+
+  return utcTimestamp;
 }
 
 function timestampFromPath(sessionPath: string): number {

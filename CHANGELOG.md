@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+## [1.1.4] - 2026-06-16
+
+### Fixed
+- Added round-trip date validation for parsed calendar timestamps so invalid dates (e.g., month 13 or day 32) no longer produce false-positive sort keys.
+
 ## 1.1.3 - 2026-06-01
 
 - Deferred command module loading for `/session-cleanup` and `/nix` handlers while preserving inline completions.

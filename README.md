@@ -1,12 +1,18 @@
+<div align="center">
+
 # pi-session-cleanup
 
-[![npm version](https://img.shields.io/npm/v/pi-session-cleanup?style=flat-square)](https://www.npmjs.com/package/pi-session-cleanup) [![License](https://img.shields.io/github/license/MasuRii/pi-session-cleanup?style=flat-square)](LICENSE)
+[![npm version](https://img.shields.io/npm/v/pi-session-cleanup?style=for-the-badge)](https://www.npmjs.com/package/pi-session-cleanup)
+[![License](https://img.shields.io/github/license/MasuRii/pi-session-cleanup?style=for-the-badge)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows-blue?style=for-the-badge)]()
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/Y8Y01PSSVR)
 
 Interactive session cleanup extension for the [Pi coding agent](https://github.com/mariozechner/pi).
-
 <img width="1389" height="768" alt="image" src="https://github.com/user-attachments/assets/42464ca1-4a6c-4496-b13f-5bcc2093bf59" />
-
 **pi-session-cleanup** provides a focused TUI command for batch-selecting historical sessions and deleting them safely with trash-first fallback and active session protection.
+
+</div>
 
 ## Features
 
@@ -147,16 +153,16 @@ The package metadata follows the same publish-ready shape used by established Pi
 - published files: source, README, changelog, license, and config template
 - runtime `config.json`, tests, and build artifacts excluded from npm publication
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for version history.
+
 ## Related Pi Extensions
 
 - [pi-hide-messages](https://github.com/MasuRii/pi-hide-messages) — Hide older TUI chat history while preserving full session context
 - [pi-context-injector](https://github.com/MasuRii/pi-context-injector) — Inject compact project context into first-turn and compaction prompts
 - [pi-tool-display](https://github.com/MasuRii/pi-tool-display) — Compact tool rendering and diff visualization
 - [pi-rtk-optimizer](https://github.com/MasuRii/pi-rtk-optimizer) — RTK command rewriting and output compaction
-
-## Changelog
-
-See [CHANGELOG.md](CHANGELOG.md) for version history.
 
 ## License
 

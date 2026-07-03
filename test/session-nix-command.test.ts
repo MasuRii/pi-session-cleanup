@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -10,6 +10,8 @@ import {
   getSessionNixArgumentCompletions,
   handleSessionNixCommand,
 } from "../src/session-nix-command.js";
+import { createAgentTestFixture } from "./helpers/fixtures.js";
+import { withEnv } from "./helpers/env.js";
 
 interface MockCommandContextOptions {
   cwd?: string;
@@ -75,34 +77,6 @@ function createCommandContext(options: MockCommandContextOptions = {}) {
       return newSessionCalls;
     },
   };
-}
-
-async function withEnv<T>(
-  overrides: Record<string, string | undefined>,
-  fn: () => Promise<T> | T,
-): Promise<T> {
-  const previous = new Map<string, string | undefined>();
-
-  for (const [key, value] of Object.entries(overrides)) {
-    previous.set(key, process.env[key]);
-    if (value === undefined) {
-      delete process.env[key];
-    } else {
-      process.env[key] = value;
-    }
-  }
-
-  try {
-    return await fn();
-  } finally {
-    for (const [key, value] of previous.entries()) {
-      if (value === undefined) {
-        delete process.env[key];
-      } else {
-        process.env[key] = value;
-      }
-    }
-  }
 }
 
 test("getSessionNixArgumentCompletions returns safe /nix subcommands", () => {
@@ -190,25 +164,15 @@ test("handleSessionNixCommand refuses /nix quit when graceful shutdown is unavai
 });
 
 test("handleSessionNixCommand warns when target-agent session deletion fails after switching", async () => {
-  const tempDir = mkdtempSync(join(tmpdir(), "pi-session-cleanup-nix-agent-delete-fail-"));
+  const fixture = createAgentTestFixture("pi-session-cleanup-nix-agent-delete-fail-");
 
   try {
-    const runtimeDir = join(tempDir, "runtime");
-    const cwd = join(tempDir, "workspace");
-    const agentsDir = join(cwd, ".pi", "agents");
-    const sessionPath = join(tempDir, "session.jsonl");
-    mkdirSync(agentsDir, { recursive: true });
-    mkdirSync(runtimeDir, { recursive: true });
-    writeFileSync(
-      join(agentsDir, "release-agent.md"),
-      "---\nname: release-agent\ndescription: Release readiness agent\nmode: subagent\n---\n",
-      "utf8",
-    );
+    const sessionPath = join(fixture.tempDir, "session.jsonl");
 
-    const mock = createCommandContext({ cwd, sessionFile: sessionPath });
+    const mock = createCommandContext({ cwd: fixture.cwd, sessionFile: sessionPath });
     let deleteCalls = 0;
 
-    await withEnv({ PI_CODING_AGENT_DIR: runtimeDir }, async () => {
+    await withEnv({ PI_CODING_AGENT_DIR: fixture.runtimeDir }, async () => {
       await handleSessionNixCommand("agent release-agent", mock.ctx, {
         deleteSessionFile: async (path: string) => {
           deleteCalls += 1;
@@ -227,33 +191,22 @@ test("handleSessionNixCommand warns when target-agent session deletion fails aft
       },
     ]);
   } finally {
-    rmSync(tempDir, { recursive: true, force: true });
+    fixture.cleanup();
   }
 });
 
 test("handleSessionNixCommand starts an explicit target-agent session with active-agent metadata", async () => {
-  const tempDir = mkdtempSync(join(tmpdir(), "pi-session-cleanup-nix-agent-"));
+  const fixture = createAgentTestFixture("pi-session-cleanup-nix-agent-");
 
   try {
-    const runtimeDir = join(tempDir, "runtime");
-    const cwd = join(tempDir, "workspace");
-    const agentsDir = join(cwd, ".pi", "agents");
-    mkdirSync(agentsDir, { recursive: true });
-    mkdirSync(runtimeDir, { recursive: true });
-    writeFileSync(
-      join(agentsDir, "release-agent.md"),
-      "---\nname: release-agent\ndescription: Release readiness agent\nmode: subagent\n---\n",
-      "utf8",
-    );
-
     const mock = createCommandContext({
-      cwd,
+      cwd: fixture.cwd,
       entries: [
         { type: "custom", customType: "active_agent", data: { name: "code" } },
       ],
     });
 
-    await withEnv({ PI_CODING_AGENT_DIR: runtimeDir }, async () => {
+    await withEnv({ PI_CODING_AGENT_DIR: fixture.runtimeDir }, async () => {
       await handleSessionNixCommand("agent release-agent", mock.ctx);
     });
 
@@ -267,6 +220,6 @@ test("handleSessionNixCommand starts an explicit target-agent session with activ
     ]);
     assert.deepEqual(mock.notifications, []);
   } finally {
-    rmSync(tempDir, { recursive: true, force: true });
+    fixture.cleanup();
   }
 });

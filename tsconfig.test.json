@@ -6,6 +6,6 @@
     "noEmit": false,
     "outDir": ".test-dist"
   },
-  "include": ["index.ts", "src/**/*.ts", "test/**/*.test.ts"],
+  "include": ["index.ts", "src/**/*.ts", "test/**/*.ts"],
   "exclude": ["node_modules"]
 }

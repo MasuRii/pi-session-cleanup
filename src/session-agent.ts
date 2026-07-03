@@ -2,11 +2,8 @@ import { readFile } from "node:fs/promises";
 
 import type { SessionInfo } from "@earendil-works/pi-coding-agent";
 
+import { toRecord } from "./record-utils.js";
 import type { SessionCleanupSession } from "./types.js";
-
-function toRecord(value: unknown): Record<string, unknown> | null {
-  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
-}
 
 function normalizeAgentName(value: unknown): string | null {
   if (typeof value !== "string") {
@@ -25,6 +22,28 @@ function parseJsonLine(value: string): Record<string, unknown> | null {
   }
 }
 
+function extractAgentNameFromEntry(
+  entry: unknown,
+  continueOnInvalidName: boolean,
+): string | null | undefined {
+  const record = toRecord(entry);
+  if (!record || record.type !== "custom" || record.customType !== "active_agent") {
+    return undefined;
+  }
+
+  const data = toRecord(record.data);
+  const normalizedAgentName = normalizeAgentName(data?.name);
+  if (normalizedAgentName) {
+    return normalizedAgentName;
+  }
+
+  if (data?.name === null) {
+    return null;
+  }
+
+  return continueOnInvalidName ? undefined : null;
+}
+
 export function extractResponsibleAgentNameFromContent(content: string): string | null {
   const lines = content.split(/\r?\n/);
 
@@ -35,18 +54,13 @@ export function extractResponsibleAgentNameFromContent(content: string): string 
     }
 
     const entry = parseJsonLine(trimmed);
-    if (!entry || entry.type !== "custom" || entry.customType !== "active_agent") {
+    if (!entry) {
       continue;
     }
 
-    const data = toRecord(entry.data);
-    const normalizedAgentName = normalizeAgentName(data?.name);
-    if (normalizedAgentName) {
-      return normalizedAgentName;
-    }
-
-    if (data?.name === null) {
-      return null;
+    const agentName = extractAgentNameFromEntry(entry, true);
+    if (agentName !== undefined) {
+      return agentName;
     }
   }
 
@@ -70,22 +84,10 @@ export function extractPersistedActiveAgentNameFromEntries(
   entries: readonly unknown[],
 ): string | null | undefined {
   for (let index = entries.length - 1; index >= 0; index -= 1) {
-    const entry = toRecord(entries[index]);
-    if (!entry || entry.type !== "custom" || entry.customType !== "active_agent") {
-      continue;
+    const agentName = extractAgentNameFromEntry(entries[index], false);
+    if (agentName !== undefined) {
+      return agentName;
     }
-
-    const data = toRecord(entry.data);
-    const normalizedAgentName = normalizeAgentName(data?.name);
-    if (normalizedAgentName) {
-      return normalizedAgentName;
-    }
-
-    if (data?.name === null) {
-      return null;
-    }
-
-    return null;
   }
 
   return undefined;

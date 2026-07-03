@@ -170,7 +170,7 @@ declare module "@earendil-works/pi-coding-agent" {
       parentSession?: string;
       setup?: (sessionManager: SessionManager) => Promise<void>;
     }): Promise<{ cancelled: boolean }>;
-    reload(): Promise<void>;
+    reload(options?: { beforeSessionStart?: () => void | Promise<void> }): Promise<void>;
   }
 
   export interface ResourcesDiscoverEvent {

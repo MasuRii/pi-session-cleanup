@@ -6,7 +6,13 @@ import type {
 import {
   SESSION_CLEANUP_COMMAND,
 } from "./constants.js";
+import {
+  getMatchedCompletions,
+  SESSION_CLEANUP_ARGUMENT_COMPLETIONS,
+  type CommandCompletion,
+} from "./argument-completions.js";
 import { getSessionTitle } from "./session-format.js";
+import { getErrorMessage } from "./error-utils.js";
 import { deleteSessionFile } from "./session-delete.js";
 import { loadSessions } from "./session-source.js";
 import { selectSessionsForCleanup } from "./session-selection.js";
@@ -15,24 +21,6 @@ import type {
   SessionCleanupSession,
   SessionScope,
 } from "./types.js";
-
-const ARG_COMPLETIONS = [
-  {
-    value: "current",
-    label: "current",
-    description: "List sessions from the current working directory only",
-  },
-  {
-    value: "all",
-    label: "all",
-    description: "List sessions across every working directory",
-  },
-  {
-    value: "help",
-    label: "help",
-    description: "Show usage",
-  },
-] as const;
 
 interface ParsedArgs {
   help: boolean;
@@ -130,10 +118,9 @@ async function deleteSelectedSessions(
         });
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
       result.failed.push({
         session,
-        error: message,
+        error: getErrorMessage(error),
       });
     }
   }
@@ -169,20 +156,8 @@ function notifyDeleteOutcome(ctx: ExtensionCommandContext, result: BatchDeleteRe
 
 export function getSessionCleanupArgumentCompletions(
   argumentPrefix: string,
-): Array<{ value: string; label: string; description?: string }> | null {
-  const normalizedPrefix = argumentPrefix.trim().toLowerCase();
-  if (!normalizedPrefix) {
-    return [...ARG_COMPLETIONS];
-  }
-
-  const matched = ARG_COMPLETIONS.filter((item) =>
-    item.value.startsWith(normalizedPrefix),
-  );
-  if (matched.length === 0) {
-    return null;
-  }
-
-  return matched.map((item) => ({ ...item }));
+): CommandCompletion[] | null {
+  return getMatchedCompletions(argumentPrefix, SESSION_CLEANUP_ARGUMENT_COMPLETIONS);
 }
 
 export async function handleSessionCleanupCommand(
@@ -212,8 +187,7 @@ export async function handleSessionCleanupCommand(
     try {
       sessions = await loadSessions(ctx, parsed.scope);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      ctx.ui.notify(`Failed to load sessions: ${message}`, "error");
+      ctx.ui.notify(`Failed to load sessions: ${getErrorMessage(error)}`, "error");
       return;
     }
 

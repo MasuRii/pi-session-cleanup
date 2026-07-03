@@ -1,8 +1,13 @@
 import { basename } from "node:path";
 
-import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionCommandContext, SessionManager } from "@earendil-works/pi-coding-agent";
 
 import { SESSION_NIX_COMMAND } from "./constants.js";
+import {
+  getMatchedCompletions,
+  SESSION_NIX_ARGUMENT_COMPLETIONS,
+  type CommandCompletion,
+} from "./argument-completions.js";
 import {
   resolveTargetAgentForSessionNix,
   type SelectableAgent,
@@ -10,28 +15,11 @@ import {
 import { extractPersistedActiveAgentNameFromEntries } from "./session-agent.js";
 import { deleteSessionFile } from "./session-delete.js";
 import { appendActiveAgentSessionEntry } from "./session-entry.js";
+import { getErrorMessage } from "./error-utils.js";
 import {
   clearScheduledSessionDeletionForQuit,
   scheduleSessionDeletionForQuit,
 } from "./session-quit-shutdown.js";
-
-const ARG_COMPLETIONS = [
-  {
-    value: "quit",
-    label: "quit",
-    description: "Delete the current session and quit Pi immediately",
-  },
-  {
-    value: "agent",
-    label: "agent",
-    description: "Start a fresh session with a selected target agent",
-  },
-  {
-    value: "help",
-    label: "help",
-    description: "Show usage",
-  },
-] as const;
 
 type NixMode = "fresh" | "quit" | "agent";
 
@@ -48,7 +36,7 @@ interface SessionNixCommandOptions {
   deleteSessionFile?: DeleteSessionFileFn;
 }
 
-function usage(): string {
+function nixUsage(): string {
   return [
     `Usage: /${SESSION_NIX_COMMAND}`,
     `       /${SESSION_NIX_COMMAND} quit`,
@@ -62,7 +50,7 @@ function getSessionLabel(sessionPath: string): string {
   return fileName.length > 0 ? fileName : sessionPath;
 }
 
-function parseArgs(args: string): ParsedArgs {
+function parseNixArgs(args: string): ParsedArgs {
   const trimmed = args.trim();
   if (!trimmed) {
     return { help: false, mode: "fresh" };
@@ -103,13 +91,17 @@ function parseArgs(args: string): ParsedArgs {
   };
 }
 
-function buildFreshConfirmationMessage(previousSessionFile: string | undefined): string {
+function buildSimpleConfirmationMessage(
+  previousSessionFile: string | undefined,
+  noSessionMessage: string,
+  introMessage: string,
+): string {
   if (!previousSessionFile) {
-    return "This will start a new session. The current session is not persisted yet, so there is no session file to delete.";
+    return noSessionMessage;
   }
 
   return [
-    "This will start a new session and permanently remove the current session from your session history.",
+    introMessage,
     "",
     `Current session: ${getSessionLabel(previousSessionFile)}`,
     "",
@@ -117,18 +109,20 @@ function buildFreshConfirmationMessage(previousSessionFile: string | undefined):
   ].join("\n");
 }
 
-function buildQuitConfirmationMessage(previousSessionFile: string | undefined): string {
-  if (!previousSessionFile) {
-    return "This will quit Pi immediately. The current session is not persisted yet, so there is no session file to delete first.";
-  }
+function buildFreshConfirmationMessage(previousSessionFile: string | undefined): string {
+  return buildSimpleConfirmationMessage(
+    previousSessionFile,
+    "This will start a new session. The current session is not persisted yet, so there is no session file to delete.",
+    "This will start a new session and permanently remove the current session from your session history.",
+  );
+}
 
-  return [
+function buildQuitConfirmationMessage(previousSessionFile: string | undefined): string {
+  return buildSimpleConfirmationMessage(
+    previousSessionFile,
+    "This will quit Pi immediately. The current session is not persisted yet, so there is no session file to delete first.",
     "This will permanently remove the current session and then quit Pi immediately.",
-    "",
-    `Current session: ${getSessionLabel(previousSessionFile)}`,
-    "",
-    "Pi will try moving it to trash first, then permanently delete it if trash is unavailable.",
-  ].join("\n");
+  );
 }
 
 function buildAgentConfirmationMessage(
@@ -155,18 +149,8 @@ function buildAgentConfirmationMessage(
 
 export function getSessionNixArgumentCompletions(
   argumentPrefix: string,
-): Array<{ value: string; label: string; description?: string }> | null {
-  const normalizedPrefix = argumentPrefix.trim().toLowerCase();
-  if (!normalizedPrefix) {
-    return [...ARG_COMPLETIONS];
-  }
-
-  const matched = ARG_COMPLETIONS.filter((item) => item.value.startsWith(normalizedPrefix));
-  if (matched.length === 0) {
-    return null;
-  }
-
-  return matched.map((item) => ({ ...item }));
+): CommandCompletion[] | null {
+  return getMatchedCompletions(argumentPrefix, SESSION_NIX_ARGUMENT_COMPLETIONS);
 }
 
 async function deletePreviousSessionAfterSwitch(
@@ -187,11 +171,30 @@ async function deletePreviousSessionAfterSwitch(
       );
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
     ctx.ui.notify(
-      `Failed to delete the previous session after starting the new session: ${message}`,
+      `Failed to delete the previous session after starting the new session: ${getErrorMessage(error)}`,
       "warning",
     );
+  }
+}
+
+async function startNewSession(
+  ctx: ExtensionCommandContext,
+  setup: ((sessionManager: SessionManager) => Promise<void>) | undefined,
+  failureMessagePrefix: string,
+): Promise<{ cancelled: boolean }> {
+  try {
+    const newSessionResult = await ctx.newSession(
+      setup ? { setup } : undefined,
+    );
+    if (newSessionResult.cancelled) {
+      ctx.ui.notify("New session cancelled.", "info");
+      return { cancelled: true };
+    }
+    return { cancelled: false };
+  } catch (error) {
+    ctx.ui.notify(`${failureMessagePrefix}: ${getErrorMessage(error)}`, "error");
+    return { cancelled: true };
   }
 }
 
@@ -200,15 +203,8 @@ async function startFreshSession(
   previousSessionFile: string | undefined,
   deleteSessionFileFn: DeleteSessionFileFn,
 ): Promise<void> {
-  try {
-    const newSessionResult = await ctx.newSession();
-    if (newSessionResult.cancelled) {
-      ctx.ui.notify("New session cancelled.", "info");
-      return;
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    ctx.ui.notify(`Failed to start a new session: ${message}`, "error");
+  const result = await startNewSession(ctx, undefined, "Failed to start a new session");
+  if (result.cancelled) {
     return;
   }
 
@@ -221,20 +217,12 @@ async function startAgentTargetSession(
   targetAgent: SelectableAgent,
   deleteSessionFileFn: DeleteSessionFileFn,
 ): Promise<void> {
-  try {
-    const newSessionResult = await ctx.newSession({
-      setup: async (sessionManager) => {
-        appendActiveAgentSessionEntry(sessionManager, targetAgent.name);
-      },
-    });
-
-    if (newSessionResult.cancelled) {
-      ctx.ui.notify("New session cancelled.", "info");
-      return;
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    ctx.ui.notify(`Failed to start a new session for agent '${targetAgent.name}': ${message}`, "error");
+  const result = await startNewSession(
+    ctx,
+    async (sessionManager) => appendActiveAgentSessionEntry(sessionManager, targetAgent.name),
+    `Failed to start a new session for agent '${targetAgent.name}'`,
+  );
+  if (result.cancelled) {
     return;
   }
 
@@ -263,8 +251,7 @@ async function requestGracefulQuit(
     await Promise.resolve(shutdown.call(ctx));
   } catch (error) {
     clearScheduledSessionDeletionForQuit();
-    const message = error instanceof Error ? error.message : String(error);
-    ctx.ui.notify(`Failed to quit Pi gracefully: ${message}`, "error");
+    ctx.ui.notify(`Failed to quit Pi gracefully: ${getErrorMessage(error)}`, "error");
   }
 }
 
@@ -273,14 +260,14 @@ export async function handleSessionNixCommand(
   ctx: ExtensionCommandContext,
   options: SessionNixCommandOptions = {},
 ): Promise<void> {
-  const parsed = parseArgs(args);
+  const parsed = parseNixArgs(args);
   if (parsed.help) {
-    ctx.ui.notify(usage(), "info");
+    ctx.ui.notify(nixUsage(), "info");
     return;
   }
 
   if (parsed.error) {
-    ctx.ui.notify(`${parsed.error}\n${usage()}`, "warning");
+    ctx.ui.notify(`${parsed.error}\n${nixUsage()}`, "warning");
     return;
   }
 

@@ -1,6 +1,7 @@
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 
 import { buildSessionSelectionLabel } from "./session-format.js";
+import { getErrorMessage } from "./error-utils.js";
 import { showSessionCleanupPicker } from "./tui/session-cleanup-picker.js";
 import type { SessionCleanupSession, SessionSelectionResult } from "./types.js";
 
@@ -157,9 +158,8 @@ export async function selectSessionsForCleanup(
   try {
     return await showSessionCleanupPicker(ctx, sessions);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
     ctx.ui.notify(
-      `Interactive picker failed (${message}). Falling back to basic selector.`,
+      `Interactive picker failed (${getErrorMessage(error)}). Falling back to basic selector.`,
       "warning",
     );
     return selectSessionsWithLegacyMenu(ctx, sessions);

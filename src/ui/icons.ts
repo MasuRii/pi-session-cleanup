@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { parseEnumString } from "../record-utils.js";
 import type { IconModePreference } from "../config-store.js";
 
 export type PickerIconMode = "nerd" | "fallback";
@@ -124,17 +125,10 @@ function parseEnvBoolean(value: string | undefined): boolean | null {
   return null;
 }
 
+const ICON_MODE_VALUES = ["auto", "nerd", "fallback"] as const;
+
 function parseMode(value: string | undefined): IconModePreference | null {
-  if (!value) {
-    return null;
-  }
-
-  const normalized = value.trim().toLowerCase();
-  if (normalized === "auto" || normalized === "nerd" || normalized === "fallback") {
-    return normalized;
-  }
-
-  return null;
+  return parseEnumString<IconModePreference, null>(value, ICON_MODE_VALUES, null);
 }
 
 function resolvePreference(
@@ -174,14 +168,14 @@ function parseSettingsJson(raw: string): Record<string, unknown> | null {
   const withoutBom = raw.replace(/^\uFEFF/, "");
 
   try {
-    const parsed = JSON.parse(withoutBom);
+    const parsed = JSON.parse(withoutBom) as unknown;
     return isRecord(parsed) ? parsed : null;
   } catch {
     const withoutComments = stripJsonComments(withoutBom);
     const withoutTrailingCommas = stripTrailingCommas(withoutComments);
 
     try {
-      const parsed = JSON.parse(withoutTrailingCommas);
+      const parsed = JSON.parse(withoutTrailingCommas) as unknown;
       return isRecord(parsed) ? parsed : null;
     } catch {
       return null;
@@ -189,10 +183,43 @@ function parseSettingsJson(raw: string): Record<string, unknown> | null {
   }
 }
 
+interface JsonStringScanState {
+  inString: boolean;
+  escaped: boolean;
+}
+
+/**
+ * Tracks JSON string-literal state across a single character.
+ *
+ * Returns the character to append to the output when it is part of a string
+ * literal (including the opening quote), or `null` when the caller should
+ * handle the character itself (comment or comma logic). Shared by
+ * `stripJsonComments` and `stripTrailingCommas` so the string-escape scanner
+ * is defined once.
+ */
+function trackJsonString(state: JsonStringScanState, current: string): string | null {
+  if (state.inString) {
+    if (state.escaped) {
+      state.escaped = false;
+    } else if (current === "\\") {
+      state.escaped = true;
+    } else if (current === '"') {
+      state.inString = false;
+    }
+    return current;
+  }
+
+  if (current === '"') {
+    state.inString = true;
+    return current;
+  }
+
+  return null;
+}
+
 function stripJsonComments(value: string): string {
   let result = "";
-  let inString = false;
-  let escaped = false;
+  const state: JsonStringScanState = { inString: false, escaped: false };
   let inLineComment = false;
   let inBlockComment = false;
 
@@ -216,21 +243,9 @@ function stripJsonComments(value: string): string {
       continue;
     }
 
-    if (inString) {
-      result += current;
-      if (escaped) {
-        escaped = false;
-      } else if (current === "\\") {
-        escaped = true;
-      } else if (current === '"') {
-        inString = false;
-      }
-      continue;
-    }
-
-    if (current === '"') {
-      inString = true;
-      result += current;
+    const stringChar = trackJsonString(state, current);
+    if (stringChar !== null) {
+      result += stringChar;
       continue;
     }
 
@@ -254,27 +269,14 @@ function stripJsonComments(value: string): string {
 
 function stripTrailingCommas(value: string): string {
   let result = "";
-  let inString = false;
-  let escaped = false;
+  const state: JsonStringScanState = { inString: false, escaped: false };
 
   for (let index = 0; index < value.length; index += 1) {
     const current = value[index];
 
-    if (inString) {
-      result += current;
-      if (escaped) {
-        escaped = false;
-      } else if (current === "\\") {
-        escaped = true;
-      } else if (current === '"') {
-        inString = false;
-      }
-      continue;
-    }
-
-    if (current === '"') {
-      inString = true;
-      result += current;
+    const stringChar = trackJsonString(state, current);
+    if (stringChar !== null) {
+      result += stringChar;
       continue;
     }
 

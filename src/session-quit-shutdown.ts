@@ -1,6 +1,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 import { deleteSessionFile } from "./session-delete.js";
+import { getErrorMessage } from "./error-utils.js";
 
 let pendingSessionFileForQuitDeletion: string | undefined;
 
@@ -31,9 +32,8 @@ export async function flushScheduledSessionDeletionForQuit(
       );
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
     ctx.ui.notify(
-      `Failed to delete the current session during shutdown: ${message}`,
+      `Failed to delete the current session during shutdown: ${getErrorMessage(error)}`,
       "warning",
     );
   }

@@ -38,28 +38,33 @@ function readConfigFile(configPath: string): Record<string, unknown> | null {
 
   try {
     const raw = readFileSync(configPath, "utf8");
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(raw) as unknown;
     if (parsed && typeof parsed === "object") {
       return parsed as Record<string, unknown>;
     }
   } catch {
     // Fall back to defaults when config parsing fails.
+    return null;
   }
 
   return null;
 }
 
-function ensureConfigFile(configPath: string): void {
+function ensureConfigFile(configPath: string): boolean {
   if (existsSync(configPath)) {
-    return;
+    return true;
   }
 
   try {
     mkdirSync(dirname(configPath), { recursive: true });
     writeFileSync(configPath, `${JSON.stringify(DEFAULT_CONFIG, null, 2)}\n`, "utf8");
   } catch {
-    // Ignore file system errors and continue with in-memory defaults.
+    // Best-effort config creation: fall back to in-memory defaults when the
+    // filesystem is read-only or the path is unavailable.
+    return false;
   }
+
+  return true;
 }
 
 export function loadSessionCleanupConfig(): SessionCleanupConfig {

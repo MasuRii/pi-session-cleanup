@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { unlink } from "node:fs/promises";
 
 import type { DeleteSessionResult } from "./types.js";
+import { getErrorMessage } from "./error-utils.js";
 
 const TRASH_PROVIDER_TIMEOUT_MS = 5_000;
 const TRASH_PROVIDER_MAX_STDERR_BYTES = 64 * 1024;
@@ -89,9 +90,18 @@ function runTrashProcess(
   options: { timeout: number; maxStderrBytes: number },
 ): Promise<TrashProcessResult> {
   return new Promise((resolve) => {
+    const allowedTrashCommands = new Set(TRASH_PROVIDERS.map((provider) => provider.command));
+    if (!allowedTrashCommands.has(command)) {
+      resolve({
+        status: null,
+        error: new Error(`Trash command is not allowlisted: ${command}`),
+      });
+      return;
+    }
+
     let child: ReturnType<typeof spawn>;
     try {
-      child = spawn(command, [...args], {
+      child = spawn(command, [...args], { // nosemgrep: javascript.lang.security.detect-child-process.detect-child-process -- command is checked against the hardcoded TRASH_PROVIDERS command list above; args are provider-generated arrays and shell is disabled.
         stdio: ["ignore", "ignore", "pipe"],
         windowsHide: true,
       });
@@ -192,7 +202,7 @@ export async function deleteSessionFile(
     await unlinkFile(sessionPath);
     return { ok: true, method: "unlink" };
   } catch (error) {
-    const unlinkError = error instanceof Error ? error.message : String(error);
+    const unlinkError = getErrorMessage(error);
     const trashHint = trashHints.length > 0 ? trashHints.join("; ") : null;
 
     return {

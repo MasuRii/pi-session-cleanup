@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 
+import { parseEnumString, toRecord } from "./record-utils.js";
+
 const DEFAULT_PROJECT_SOURCE_DIRS = [".omp/agents", ".pi/agents", ".claude/agents"];
 const DEFAULT_USER_SOURCE_DIRS = ["{home}/.omp/agents", "{agentDir}/agents", "{home}/.claude/agents"];
 const ROUTER_CONFIG_FILE_NAME = "config.json";
@@ -44,10 +46,6 @@ function normalizeStringArray(value: unknown): string[] | null {
   return normalized.length > 0 ? normalized : null;
 }
 
-function toRecord(value: unknown): Record<string, unknown> | null {
-  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
-}
-
 function expandHomeDirectory(configuredDir: string, homeDirectory: string): string {
   if (configuredDir === "~") {
     return homeDirectory;
@@ -79,21 +77,29 @@ function resolveRouterConfigCandidates(): string[] {
   ];
 }
 
+function parseRouterConfigFile(configPath: string): AgentDiscoveryConfig | null {
+  try {
+    const parsed = JSON.parse(readFileSync(configPath, "utf-8")) as unknown;
+    const config = toRecord(parsed);
+    const agentDiscovery = toRecord(config?.agentDiscovery);
+    const projectSourceDirs = normalizeStringArray(agentDiscovery?.projectSourceDirs);
+    const userSourceDirs = normalizeStringArray(agentDiscovery?.userSourceDirs);
+
+    return {
+      projectSourceDirs: projectSourceDirs ?? [...DEFAULT_PROJECT_SOURCE_DIRS],
+      userSourceDirs: userSourceDirs ?? [...DEFAULT_USER_SOURCE_DIRS],
+    };
+  } catch {
+    // Unreadable or malformed config; try the next candidate.
+    return null;
+  }
+}
+
 function loadAgentDiscoveryConfig(): AgentDiscoveryConfig {
   for (const configPath of resolveRouterConfigCandidates()) {
-    try {
-      const parsed = JSON.parse(readFileSync(configPath, "utf-8")) as unknown;
-      const config = toRecord(parsed);
-      const agentDiscovery = toRecord(config?.agentDiscovery);
-      const projectSourceDirs = normalizeStringArray(agentDiscovery?.projectSourceDirs);
-      const userSourceDirs = normalizeStringArray(agentDiscovery?.userSourceDirs);
-
-      return {
-        projectSourceDirs: projectSourceDirs ?? [...DEFAULT_PROJECT_SOURCE_DIRS],
-        userSourceDirs: userSourceDirs ?? [...DEFAULT_USER_SOURCE_DIRS],
-      };
-    } catch {
-      continue;
+    const config = parseRouterConfigFile(configPath);
+    if (config) {
+      return config;
     }
   }
 
@@ -170,17 +176,10 @@ function findNearestProjectAgentDirs(cwd: string, projectSourceDirs: readonly st
   }
 }
 
+const AGENT_MODE_VALUES = ["primary", "subagent", "all"] as const;
+
 function parseAgentMode(value: unknown): AgentMode | undefined {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-
-  const normalized = value.trim().toLowerCase();
-  if (normalized === "primary" || normalized === "subagent" || normalized === "all") {
-    return normalized;
-  }
-
-  return undefined;
+  return parseEnumString<AgentMode, undefined>(value, AGENT_MODE_VALUES, undefined);
 }
 
 function parseFrontmatter(content: string): Record<string, string> | null {
@@ -251,7 +250,7 @@ function truncateDescription(description: string, maxLength = 72): string {
   return `${normalized.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
 }
 
-function formatModeBadge(agent: SelectableAgent): string {
+export function formatModeBadge(agent: SelectableAgent): string {
   return `[${agent.mode ?? "primary"}]`;
 }
 

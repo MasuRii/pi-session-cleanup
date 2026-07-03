@@ -1,105 +1,48 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
+import { loadSessionCleanupConfig } from "./config-store.js";
 import { SESSION_CLEANUP_COMMAND, SESSION_NIX_COMMAND } from "./constants.js";
 import { flushScheduledSessionDeletionForQuit } from "./session-quit-shutdown.js";
+import {
+  getMatchedCompletions,
+  SESSION_CLEANUP_ARGUMENT_COMPLETIONS,
+  SESSION_NIX_ARGUMENT_COMPLETIONS,
+} from "./argument-completions.js";
 
 type SessionCleanupCommandModule = typeof import("./session-cleanup-command.js");
 type SessionNixCommandModule = typeof import("./session-nix-command.js");
-type CommandCompletion = {
-  value: string;
-  label: string;
-  description?: string;
-};
 
-const SESSION_CLEANUP_ARGUMENT_COMPLETIONS = [
-  {
-    value: "current",
-    label: "current",
-    description: "List sessions from the current working directory only",
-  },
-  {
-    value: "all",
-    label: "all",
-    description: "List sessions across every working directory",
-  },
-  {
-    value: "help",
-    label: "help",
-    description: "Show usage",
-  },
-] as const satisfies readonly CommandCompletion[];
+function createLazyModuleLoader<TModule>(
+  importer: () => Promise<TModule>,
+): () => Promise<TModule> {
+  let cached: TModule | undefined;
+  let pending: Promise<TModule> | undefined;
 
-const SESSION_NIX_ARGUMENT_COMPLETIONS = [
-  {
-    value: "quit",
-    label: "quit",
-    description: "Delete the current session and quit Pi immediately",
-  },
-  {
-    value: "agent",
-    label: "agent",
-    description: "Start a fresh session with a selected target agent",
-  },
-  {
-    value: "help",
-    label: "help",
-    description: "Show usage",
-  },
-] as const satisfies readonly CommandCompletion[];
+  return () => {
+    if (cached) {
+      return Promise.resolve(cached);
+    }
 
-let sessionCleanupCommandModule: SessionCleanupCommandModule | undefined;
-let sessionCleanupCommandModulePromise: Promise<SessionCleanupCommandModule> | undefined;
-let sessionNixCommandModule: SessionNixCommandModule | undefined;
-let sessionNixCommandModulePromise: Promise<SessionNixCommandModule> | undefined;
-
-function loadSessionCleanupCommandModule(): Promise<SessionCleanupCommandModule> {
-  if (sessionCleanupCommandModule) {
-    return Promise.resolve(sessionCleanupCommandModule);
-  }
-
-  sessionCleanupCommandModulePromise ??= import("./session-cleanup-command.js").then(
-    (module) => {
-      sessionCleanupCommandModule = module;
+    pending ??= importer().then((module) => {
+      cached = module;
       return module;
-    },
-  );
-  return sessionCleanupCommandModulePromise;
+    });
+    return pending;
+  };
 }
 
-function loadSessionNixCommandModule(): Promise<SessionNixCommandModule> {
-  if (sessionNixCommandModule) {
-    return Promise.resolve(sessionNixCommandModule);
-  }
-
-  sessionNixCommandModulePromise ??= import("./session-nix-command.js").then(
-    (module) => {
-      sessionNixCommandModule = module;
-      return module;
-    },
-  );
-  return sessionNixCommandModulePromise;
-}
-
-function getMatchedCompletions(
-  argumentPrefix: string,
-  completions: readonly CommandCompletion[],
-): CommandCompletion[] | null {
-  const normalizedPrefix = argumentPrefix.trim().toLowerCase();
-  if (!normalizedPrefix) {
-    return completions.map((completion) => ({ ...completion }));
-  }
-
-  const matched = completions.filter((completion) =>
-    completion.value.startsWith(normalizedPrefix),
-  );
-  if (matched.length === 0) {
-    return null;
-  }
-
-  return matched.map((completion) => ({ ...completion }));
-}
+const loadSessionCleanupCommandModule = createLazyModuleLoader<SessionCleanupCommandModule>(
+  () => import("./session-cleanup-command.js"),
+);
+const loadSessionNixCommandModule = createLazyModuleLoader<SessionNixCommandModule>(
+  () => import("./session-nix-command.js"),
+);
 
 export default function sessionCleanupExtension(pi: ExtensionAPI): void {
+  if (!loadSessionCleanupConfig().enabled) {
+    return;
+  }
+
   pi.on("session_shutdown", async (_event, ctx) => {
     await flushScheduledSessionDeletionForQuit(ctx);
   });

@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-07-03
+
+### Added
+- Added an `enabled` master toggle to the session-cleanup config so the extension can be disabled without uninstalling. ([bdc1152](https://github.com/MasuRii/pi-session-cleanup/commit/bdc1152f4f8ac7d89517efbe3ed803fb0d448694))
+
+### Changed
+- Widened Pi coding-agent and Pi TUI peer dependency ranges through `^0.80.0` and added a `postinstall` patch with npm `overrides` to resolve known vulnerabilities in transitive dependencies. ([cc8d165](https://github.com/MasuRii/pi-session-cleanup/commit/cc8d1655429c7af07694263b32aff9700d216d8d))
+- Extracted shared helpers and TUI picker base modules to deduplicate session-cleanup, nix, agent-target, and selection flows. ([bdc1152](https://github.com/MasuRii/pi-session-cleanup/commit/bdc1152f4f8ac7d89517efbe3ed803fb0d448694))
+- Extracted shared test helpers and fixtures across the agent-target and nix-command test suites. ([4feaa99](https://github.com/MasuRii/pi-session-cleanup/commit/4feaa9904081387b0eb154fc27840d5d902a27dc))
+- Updated README badge styling and added a ko-fi support button. ([1cdcd93](https://github.com/MasuRii/pi-session-cleanup/commit/1cdcd93f5cf90f45e90b19d8d24cd7f97806dfb1))
+
 ## [1.1.4] - 2026-06-16
 
 ### Fixed

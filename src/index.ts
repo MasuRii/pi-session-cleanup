@@ -43,8 +43,8 @@ export default function sessionCleanupExtension(pi: ExtensionAPI): void {
     return;
   }
 
-  pi.on("session_shutdown", async (_event, ctx) => {
-    await flushScheduledSessionDeletionForQuit(ctx);
+  pi.on("session_shutdown", async (event, ctx) => {
+    await flushScheduledSessionDeletionForQuit(ctx, { reason: event.reason });
   });
 
   pi.registerCommand(SESSION_CLEANUP_COMMAND, {

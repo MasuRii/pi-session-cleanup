@@ -1,5 +1,5 @@
-import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, unlinkSync } from "node:fs";
 import { unlink } from "node:fs/promises";
 
 import type { DeleteSessionResult } from "./types.js";
@@ -205,6 +205,46 @@ export async function deleteSessionFile(
     const unlinkError = getErrorMessage(error);
     const trashHint = trashHints.length > 0 ? trashHints.join("; ") : null;
 
+    return {
+      ok: false,
+      method: "unlink",
+      error: trashHint ? `${unlinkError} (${trashHint})` : unlinkError,
+    };
+  }
+}
+
+/** Synchronous trash-then-unlink path for the process `exit` handler. */
+export function deleteSessionFileSync(sessionPath: string): DeleteSessionResult {
+  const trashHints: string[] = [];
+
+  for (const provider of TRASH_PROVIDERS) {
+    const spawned = spawnSync(provider.command, provider.getArgs(sessionPath), { // nosemgrep: javascript.lang.security.detect-child-process.detect-child-process -- command is taken from the hardcoded TRASH_PROVIDERS list; args are provider-generated arrays and shell is disabled.
+      stdio: ["ignore", "ignore", "pipe"],
+      windowsHide: true,
+      timeout: TRASH_PROVIDER_TIMEOUT_MS,
+      maxBuffer: TRASH_PROVIDER_MAX_STDERR_BYTES,
+    });
+    const result: TrashProcessResult = {
+      status: spawned.status,
+      stderr: spawned.stderr ? `${spawned.stderr}` : undefined,
+      error: spawned.error,
+    };
+    if (result.status === 0 || !existsSync(sessionPath)) {
+      return { ok: true, method: "trash" };
+    }
+
+    const hint = buildTrashErrorHint(provider.name, result);
+    if (hint) {
+      trashHints.push(hint);
+    }
+  }
+
+  try {
+    unlinkSync(sessionPath);
+    return { ok: true, method: "unlink" };
+  } catch (error) {
+    const unlinkError = getErrorMessage(error);
+    const trashHint = trashHints.length > 0 ? trashHints.join("; ") : null;
     return {
       ok: false,
       method: "unlink",

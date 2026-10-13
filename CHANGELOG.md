@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- `/nix quit` now deletes the current session on process exit, after every `session_shutdown` handler has finished. Deleting inside the handler let a later extension recreate the session file with a single appended entry.
+
 ## [1.2.0] - 2026-07-03
 
 ### Added

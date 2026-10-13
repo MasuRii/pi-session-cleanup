@@ -22,7 +22,7 @@ Interactive session cleanup extension for the [Pi coding agent](https://github.c
 - **Safe Delete Flow** — Excludes the currently active session and uses trash-first deletion with unlink fallback
 - **Fresh Session Shortcut** — `/nix` starts a fresh session and removes the previous session after confirmation
 - **Target Agent Handoff** — `/nix agent [name]` starts a fresh session with persisted active-agent metadata
-- **Quit Cleanup Flow** — `/nix quit` schedules current-session deletion during Pi's graceful shutdown event
+- **Quit Cleanup Flow** — `/nix quit` deletes the current session on process exit, after every `session_shutdown` handler has finished
 - **Improved Modal UX** — Centered overlay with bordered layout, concise single-line legend, status summary, and automatic icon fallback
 
 ## Installation
@@ -77,7 +77,7 @@ pi install git:github.com/MasuRii/pi-session-cleanup
 
 - **`/nix`** starts a new session with the current agent and deletes the previous session only after `ctx.newSession()` succeeds.
 - **`/nix agent [name]`** starts a new session with the selected target agent and writes an `active_agent` session entry so Pi can resume that agent context. Without `[name]`, the command opens an interactive agent picker; with `[name]`, it validates the name before continuing.
-- **`/nix quit`** requires Pi builds that expose `ctx.shutdown()`. It schedules deletion of the current session and performs the delete from the `session_shutdown` event, so the session file is not removed until Pi has begun graceful shutdown.
+- **`/nix quit`** requires Pi builds that expose `ctx.shutdown()`. It schedules deletion of the current session and removes the file from a process `exit` listener. Deleting inside `session_shutdown` is too early: Pi runs those handlers in package order and then exits, so a later extension can recreate the file by appending one entry.
 
 Target agents are discovered from the nearest project agent folders (`.omp/agents`, `.pi/agents`, `.claude/agents`) plus user agent folders (`~/.omp/agents`, `$PI_CODING_AGENT_DIR/agents`, `~/.claude/agents`). If `pi-agent-router` is installed with custom `agentDiscovery` paths, those paths are reused.
 

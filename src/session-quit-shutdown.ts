@@ -3,23 +3,23 @@ import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { deleteSessionFile } from "./session-delete.js";
 import { getErrorMessage } from "./error-utils.js";
 
-let pendingSessionFileForQuitDeletion: string | undefined;
+const pendingSessionFilesForQuitDeletion = new Set<string>();
 
 export function scheduleSessionDeletionForQuit(sessionFile: string | undefined): void {
-  pendingSessionFileForQuitDeletion = sessionFile;
+  if (sessionFile) pendingSessionFilesForQuitDeletion.add(sessionFile);
 }
 
-export function clearScheduledSessionDeletionForQuit(): void {
-  pendingSessionFileForQuitDeletion = undefined;
+export function clearScheduledSessionDeletionForQuit(sessionFile: string | undefined): void {
+  if (sessionFile) pendingSessionFilesForQuitDeletion.delete(sessionFile);
 }
 
 export async function flushScheduledSessionDeletionForQuit(
   ctx: ExtensionContext,
 ): Promise<void> {
-  const sessionFile = pendingSessionFileForQuitDeletion;
-  pendingSessionFileForQuitDeletion = undefined;
-
-  if (!sessionFile) {
+  const sessionFile = ctx.sessionManager.getSessionFile();
+  // One process can host several sessions. Only the session that requested
+  // deletion may consume its pending request, including during idle shutdown.
+  if (!sessionFile || !pendingSessionFilesForQuitDeletion.delete(sessionFile)) {
     return;
   }
 

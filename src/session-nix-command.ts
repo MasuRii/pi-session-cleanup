@@ -250,7 +250,7 @@ async function requestGracefulQuit(
   try {
     await Promise.resolve(shutdown.call(ctx));
   } catch (error) {
-    clearScheduledSessionDeletionForQuit();
+    clearScheduledSessionDeletionForQuit(previousSessionFile);
     ctx.ui.notify(`Failed to quit Pi gracefully: ${getErrorMessage(error)}`, "error");
   }
 }
